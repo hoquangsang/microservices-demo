@@ -427,6 +427,24 @@ func (fe *frontendServer) logoutHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusFound)
 }
 
+func (fe *frontendServer) helloHandler(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "http://"+fe.helloSvcAddr+"/hello", nil)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to build hello request"), http.StatusInternalServerError)
+		return
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to call helloservice"), http.StatusBadGateway)
+		return
+	}
+	defer res.Body.Close()
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(res.StatusCode)
+	io.Copy(w, res.Body)
+}
+
 func (fe *frontendServer) getProductByID(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["ids"]
 	if id == "" {

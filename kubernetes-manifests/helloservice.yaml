@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hellodb-init
+data:
+  init.sql: |
+    CREATE TABLE greetings (id SERIAL PRIMARY KEY, message TEXT NOT NULL);
+    INSERT INTO greetings (message) VALUES ('hello world');
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hellodb
+  labels:
+    app: hellodb
+spec:
+  selector:
+    matchLabels:
+      app: hellodb
+  template:
+    metadata:
+      labels:
+        app: hellodb
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: hello
+            - name: POSTGRES_PASSWORD
+              value: hello
+            - name: POSTGRES_DB
+              value: hello
+          volumeMounts:
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "hello", "-d", "hello"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: init
+          configMap:
+            name: hellodb-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hellodb
+spec:
+  selector:
+    app: hellodb
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: helloservice
+  labels:
+    app: helloservice
+spec:
+  selector:
+    matchLabels:
+      app: helloservice
+  template:
+    metadata:
+      labels:
+        app: helloservice
+    spec:
+      containers:
+        - name: server
+          image: helloservice:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              value: postgres://hello:hello@hellodb:5432/hello?sslmode=disable
+          readinessProbe:
+            httpGet:
+              path: /_healthz
+              port: 8080
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: helloservice
+spec:
+  selector:
+    app: helloservice
+  ports:
+    - port: 8080
+      targetPort: 8080
